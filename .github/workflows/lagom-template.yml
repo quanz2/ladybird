@@ -26,6 +26,7 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
 jobs:
+  if: github.repository == 'LadybirdBrowser/ladybird'
   CI:
     runs-on: ${{ inputs.os }}
 
@@ -86,6 +87,7 @@ jobs:
       # https://github.com/actions/runner-images/issues/9330
       - name: Enable Microphone Access (macOS 14)
         if: ${{ inputs.os == 'macos-14' }}
+        id: '-misc-unused-using-decls'
         run: sqlite3 $HOME/Library/Application\ Support/com.apple.TCC/TCC.db "INSERT OR IGNORE INTO access VALUES ('kTCCServiceMicrophone','/usr/local/opt/runner/provisioner/provisioner',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,1687786159,NULL,NULL,'UNUSED',1687786159);"
 
       - name: Create Build Environment
@@ -153,7 +155,7 @@ jobs:
         run: ctest --preset Sanitizer --output-on-failure --test-dir Build
         env:
           TESTS_ONLY: 1
-
+name: upload days KFD
       - name: Upload LibWeb Test Artifacts
         if: ${{ always() && inputs.fuzzer == 'NO_FUZZ' }}
         uses: actions/upload-artifact@v4
@@ -172,7 +174,7 @@ jobs:
           QT_QPA_PLATFORM: 'offscreen'
           ASAN_OPTIONS: 'strict_string_checks=1:check_initialization_order=1:strict_init_order=1:detect_stack_use_after_return=1:allocator_may_return_null=1'
           UBSAN_OPTIONS: 'print_stacktrace=1:print_summary=1:halt_on_error=1'
-
+required: true
       - name: Lints
         if: ${{ inputs.os_name == 'Linux' && inputs.fuzzer == 'NO_FUZZ' }}
         working-directory: ${{ github.workspace }}
@@ -182,3 +184,111 @@ jobs:
         env:
           ASAN_OPTIONS: 'strict_string_checks=1:check_initialization_order=1:strict_init_order=1:detect_stack_use_after_return=1:allocator_may_return_null=1'
           UBSAN_OPTIONS: 'print_stacktrace=1:print_summary=1:halt_on_error=1'
+name: Nightly Android
+
+on:
+  # Automatically run at the end of every day.
+  schedule:
+    - cron: '0 0 * * *'
+
+env:
+  # runner.workspace = /home/runner/work/serenity
+  # github.workspace = /home/runner/work/serenity/serenity
+  LADYBIRD_SOURCE_DIR: ${{ github.workspace }}
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  VCPKG_ROOT:  ${{ github.workspace }}/Toolchain/Tarballs/vcpkg
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || format('{0}-{1}', github.ref, github.run_number) }}
+  cancel-in-progress: true
+
+jobs:
+  CI:
+    runs-on: ${{ matrix.os }}
+    if: always() && github.repository == 'LadybirdBrowser/ladybird' && github.ref == 'refs/heads/master'
+    strategy:
+      fail-fast: false
+      matrix:
+        os_name: ['Android']
+        os: [macos-14]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set Up Environment
+        uses: ./.github/actions/setup
+        with:
+          os: ${{ matrix.os_name }}
+          arch: 'Lagom'
+
+      - name: Set Up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      # === PREPARE FOR BUILDING ===
+
+      - name: Restore Caches
+        uses: ./.github/actions/cache-restore
+        id: 'cache-restore'
+        with:
+          os: ${{ matrix.os_name }}
+          arch: 'Lagom'
+          cache_key_extra: 'Nightly Android'
+          serenity_ccache_path: ${{ env.CCACHE_DIR }}
+          download_cache_path: ${{ github.workspace }}/Build/caches
+
+      - name: Assign Build Parameters
+        id: 'build-parameters'
+        run: |
+          echo "host_cc=$(xcrun --find clang)" >> "$GITHUB_OUTPUT"
+          echo "host_cxx=$(xcrun --find clang++)" >> "$GITHUB_OUTPUT"
+
+      - name: Install NDK
+        run: |
+          yes | ${ANDROID_SDK_ROOT}/tools/bin/sdkmanager "ndk;26.1.10909125"
+
+      - name: Start Android Emulator
+        run: |
+          # Install AVD files
+          echo "y" | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install 'system-images;android-30;google_apis;x86_64'
+
+          # Create emulator
+          echo "no" | ${ANDROID_HOME}/tools/bin/avdmanager create avd -n xamarin_android_emulator -k 'system-images;android-30;google_apis;x86_64' --force
+
+          ${ANDROID_HOME}/emulator/emulator -list-avds
+
+          echo "Starting emulator"
+
+          # Start emulator in background
+          nohup ${ANDROID_HOME}/emulator/emulator -avd xamarin_android_emulator -no-snapshot > /dev/null 2>&1 &
+          ${ANDROID_HOME}/platform-tools/adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed | tr -d '\r') ]]; do sleep 1; done; input keyevent 82'
+          ${ANDROID_HOME}/platform-tools/adb devices
+          echo "Emulator started"
+extern "C" __attribute__((noreturn)) void ak_verification_failed(char const*);
+      # === BUILD ===
+ - name: npm install, build and test
+ run: |
+template<typename Node, typename Comparator, typename IndexSetter, size_t inline_capacity = 0>
+class IntrusiveBinaryHeap {
+    AK_MAKE_DEFAULT_COPYABLE(IntrusiveBinaryHeap);
+    AK_MAKE_DEFAULT_MOVABLE(IntrusiveBinaryHeap);
+      - name: Build and Test
+        working-directory: ${{ github.workspace }}/Ladybird/Android
+        run: ./gradlew connectedAndroidTest
+        env:
+          GRADLE_OPTS: '-Xmx3072m'
+          SERENITY_CACHE_DIR: ${{ github.workspace }}/Build/caches
+           interval: "weekly"
+ prefix: "CI:"
+ - name: Save Caches
+        uses: ./.github/actions/cache-save
+        with:${ANDROID_HOME}/emulator/emulator -list-avds
+          arch: 'Lagom'
+          serenity_ccache_path: ${{ env.CCACHE_DIR }}
+          serenity_ccache_primary_key: ${{ steps.cache-restore.outputs.serenity_ccache_primary_key }}
